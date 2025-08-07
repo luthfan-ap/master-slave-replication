@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  # The MASTER Database Service
+  master:
+    image: postgres:16
+    container_name: replication-master
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      # read from the .env file
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_DB}
+      POSTGRES_INITDB_ARGS: "--auth-local=peer"
+    volumes:
+      - ./data/master:/var/lib/postgresql/data
+
+  # The SLAVE Database Service
+  slave:
+    image: postgres:16
+    container_name: replication-slave
+    restart: always
+    ports:
+      - "5433:5432"
+    environment:
+      # read from the .env file
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_DB}
+
+      
