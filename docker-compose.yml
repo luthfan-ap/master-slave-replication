@@ -29,5 +29,11 @@ services:
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
-
-      
+      # connect the slave to the master, to initiate replication and streaming the changes
+      PGMASTER_HOST: master
+      PGPRIMARY_HOST: master
+    volumes:
+      - ./data/slave:/var/lib/postgresql/data
+    depends_on:
+      master:
+        condition: service_healthy
