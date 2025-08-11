@@ -11,8 +11,9 @@ node_role = 0
 master_conn = None
 slave_conn = None
 
+
 # to connect with the db host
-def db_connection(db_host):
+def db_connect(db_host):
     try:
         db_name = os.getenv('DB_NAME', 'storage_db')
         db_user = os.getenv('DB_USER', 'user')
@@ -28,9 +29,10 @@ def db_connection(db_host):
         print(f"Cannot connect to the database at {db_host}: {e}", file=sys.stderr)
         return None
     
+
 # creates 2 tables:
 # - table for storage (key, value)
-# - table for leader (id, leader_id) 
+# - table for master (id, master_id) 
 def create_table(conn):
     try:
         with conn.cursor() as cursor:
@@ -42,17 +44,17 @@ def create_table(conn):
                 );
             """)
 
-            # Leader table (id, leader_id)
+            # Master table (id, master_id)
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS leader (
+                CREATE TABLE IF NOT EXISTS master (
                     id INT PRIMARY KEY,
-                    leader_id VARCHAR (50)
+                    master_id VARCHAR (50)
                 );
             """)
 
-            # inserting a single row in leader(id, leader_id) table
+            # inserting a single row in master(id, master_id) table
             cursor.execute("""
-                INSERT INTO leader (id, leader_id) VALUES (
+                INSERT INTO master (id, master_id) VALUES (
                     1,
                     ''
                 );
@@ -65,12 +67,54 @@ def create_table(conn):
         print(f"Error creating tables: {e}")
         conn.rollback()
 
-# elects leader
-def leader_election():
-    
 
-# loops in the background, checks whether there is an active leader or not
-def async_leader_loop()
+# elects master
+def master_election():
+    global master_conn
+    global node_role
+
+    try:
+        with master_conn.cursor() as cursor:
+            # locking the row (lock with the FOR UPDATE statement)
+            cursor.execute(
+                "SELECT master_id FROM master WHERE id = 1 FOR UPDATE;"
+            )
+
+            # updating the master_id to the elected master id
+            master_id = os.getenv('HOSTNAME') or os.getenv('CONTAINER_ID') or 'unknown_id'
+            cursor.execute(
+                "UPDATE master SET master_id = %s WHERE id = 1;", (master_id,)
+            )
+            master_conn.commit()
+
+            # set the node_role into 1 (master role)
+            if node_role != 1:
+                node_role = 1
+            return True
+
+    except psycopg2.OperationalError as e:
+        print("Lost connection to the master DB during election: {e}")
+        return False
+    except psycopg2.Error as e:
+        print("error during election: {e}")
+        # set the node_role into 2 (follower role)
+        node_role = 2
+        return False
+
+
+# loops in the background, checks whether there is an active master or not
+def async_master_loop():
+    global master_conn
+    global node_role
+
+    while True:
+        if node_role != 1: # if not master yet
+            if master_conn:
+                master_election()
+            else:
+                master_conn = db_connect(os.getenv('MASTER_DB_HOST'))
+        # re-loop every 5 seconds
+        time.sleep(5)
 
 # 'put' command handler
 def put(key, value)
