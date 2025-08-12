@@ -134,7 +134,33 @@ def put(key, value):
         master_conn.rollback()
 
 # 'get' command handler
-def get(key)
+def get(key):
+    global master_conn
+    global slave_conn
+    global node_role
+
+    conn = master_conn if node_role == 1 else slave_conn
+    
+    if conn is None:
+        print("No active connection to the database.")
+        return None
+    
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT value FROM storage WHERE key = %s;", (key,))
+            result = cursor.fetchone()
+
+            if result:
+                print(f"Retrieved value for key '{key}': {result[0]} (from {node_role} node)")
+                return result[0]
+            else:
+                print("Key not found.")
+                return None
+            
+        except psycopg2.Error as e:
+            print(f"Error retrieving data: {e}")
+            return None
+
 
 # main function
 def main()
