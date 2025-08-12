@@ -117,7 +117,21 @@ def async_master_loop():
         time.sleep(5)
 
 # 'put' command handler
-def put(key, value)
+def put(key, value):
+    global master_conn
+
+    try:
+        with master_conn.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO storage (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;",
+                (key, value)
+            )
+            master_conn.commit()
+            print(f"Successfully stored (key: {key}, value: {value})")
+
+    except psycopg2.Error as e:
+        print(f"Error storing data: {e}")
+        master_conn.rollback()
 
 # 'get' command handler
 def get(key)
