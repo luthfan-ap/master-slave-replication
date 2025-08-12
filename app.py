@@ -163,4 +163,97 @@ def get(key):
 
 
 # main function
-def main()
+def main():
+    global master_conn
+    global slave_conn
+    global node_role
+
+    # making the connections to the master and slave databases
+    master_conn = db_connect(os.getenv('MASTER_DB_HOST'))
+    slave_conn = db_connect(os.getenv('SLAVE_DB_HOST'))
+
+    # exit if theres no connection
+    if not master_conn or not slave_conn:
+        sys.exit(1)
+    
+    # create the initial tables
+    create_table(master_conn)
+
+    # start the master election loop in a separate thread
+    election_thread = threading.Thread(target=async_master_loop, daemon=True)
+    election_thread.start()
+    print("Master election loop started.")
+
+    while True:
+        try:
+            print(f"Current node role: {node_role}") # Display the current node role
+            # Display commands based on the node role
+            if node_role == 1:
+                print(
+                    """
+                    Commands:
+                    1. put <key> <value>
+                    2. get <key>
+                    3. .exit / .quit
+                    """
+                )
+            elif node_role == 2:
+                print(
+                    """
+                    Commands:
+                    1. get <key>
+                    2. .exit / .quit
+                    """
+                )
+            elif node_role == 0:
+                print("Node role is not set. Waiting for master election...")
+                time.sleep(1)
+                continue
+            
+            statement = input("Enter command: ").strip().lower()
+            if not statement:
+                continue
+
+            parts = statement.split()
+            command = parts[0]
+
+            # put command
+            if command == "put":
+                if node_role == 1:
+                    if len(parts) >= 3:
+                        key = parts[1]
+                        value = " ".join(parts[2:])
+                        put(key, value)
+                    else:
+                        print("Usage: put <key> <value>")
+                else:
+                    print("Only the master node can execute 'put' command.")
+            
+            # get command
+            elif command == "get":
+                if len(parts) != 2:
+                    print("Usage: get <key>")
+                    continue
+                key = parts[1]
+                get(key)
+
+            # exit commands
+            elif command in (".exit", ".quit"):
+                print("Exiting...")
+                break
+            
+            else:
+                print("Unknown command {command}. Please try again.")
+
+        except (IOError, EOFError):
+            break
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+    if master_conn:
+        master_conn.close()
+    if slave_conn:
+        slave_conn.close()
+
+if __name__ == "__main__":
+    main()
