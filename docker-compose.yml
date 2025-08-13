@@ -14,7 +14,7 @@ services:
     volumes:
       - ./postgres-master-data:/var/lib/postgresql/data
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
-      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf # for allowing replication connections
+      - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf # for allowing replication connections
     command: postgres -c 'wal_level=replica' -c 'max_wal_senders=10' -c 'hot_standby=on'
     networks:
       - storage_network
