@@ -14,8 +14,7 @@ services:
     volumes:
       - ./postgres-master-data:/var/lib/postgresql/data
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
-    command:
-      - postgres -c 'wal_level=replica' -c 'max_wal_senders=10' -c 'hot_standby=on'
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf # for allowing replication connections
     networks:
       - storage_network
 
@@ -32,17 +31,10 @@ services:
       POSTGRES_DB: ${PG_DB}
     volumes:
       - ./postgres-slave-1-data:/var/lib/postgresql/data
+      - ./setup-slave.sh:/usr/local/bin/setup-slave.sh
     depends_on:
       - postgres-master
-    command: >
-      sh -c '
-        echo "standby_mode = 'on'" > /var/lib/postgresql/data/postgresql.conf &&
-        echo "primary_conninfo = 'host=postgres-master port=5432 user=replication_user password=password application_name=postgres-slave-1'" >> /var/lib/postgresql/data/postgresql.conf &&
-        echo "hot_standby = 'on'" >> /var/lib/postgresql/data/postgresql.conf &&
-        echo "recovery_target_timeline = 'latest'" >> /var/lib/postgresql/data/postgresql.conf &&
-        pg_basebackup -h postgres-master -p 5432 -U replication_user -D /var/lib/postgresql/data -P -Xs -R &&
-        postgres
-      '
+    command: sh -c 'chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh'
     networks:
       - storage_network
 
@@ -59,17 +51,10 @@ services:
       POSTGRES_DB: ${PG_DB}
     volumes:
       - ./postgres-slave-2-data:/var/lib/postgresql/data
+      - ./setup-slave.sh:/usr/local/bin/setup-slave.sh
     depends_on:
       - postgres-master
-    command: >
-      sh -c '
-        echo "standby_mode = 'on'" > /var/lib/postgresql/data/postgresql.conf &&
-        echo "primary_conninfo = 'host=postgres-master port=5432 user=replication_user password=password application_name=postgres-slave-2'" >> /var/lib/postgresql/data/postgresql.conf &&
-        echo "hot_standby = 'on'" >> /var/lib/postgresql/data/postgresql.conf &&
-        echo "recovery_target_timeline = 'latest'" >> /var/lib/postgresql/data/postgresql.conf &&
-        pg_basebackup -h postgres-master -p 5432 -U replication_user -D /var/lib/postgresql/data -P -Xs -R &&
-        postgres
-      '
+    command: sh -c 'chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh'
     networks:
       - storage_network
 

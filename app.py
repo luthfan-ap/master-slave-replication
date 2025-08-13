@@ -97,7 +97,7 @@ def master_election():
         return False
     except psycopg2.Error as e:
         print("error during election: {e}")
-        # set the node_role into 2 (follower role)
+        # set the node_role into 2 (slave role)
         node_role = 2
         return False
 
