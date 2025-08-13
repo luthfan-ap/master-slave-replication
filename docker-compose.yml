@@ -1,6 +1,6 @@
 services:
   # ====== The POSTGRESQL Database Service ======
-  # PostgreSQL Leader
+  # PostgreSQL Master
   postgres-master:
     image: postgres:16
     container_name: postgres-master
@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     volumes:
-      - ./postgres-leader-data:/var/lib/postgresql/data
+      - ./postgres-master-data:/var/lib/postgresql/data
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
     command:
       - postgres -c 'wal_level=replica' -c 'max_wal_senders=10' -c 'hot_standby=on'
@@ -37,10 +37,10 @@ services:
     command: >
       sh -c '
         echo "standby_mode = 'on'" > /var/lib/postgresql/data/postgresql.conf &&
-        echo "primary_conninfo = 'host=postgres-leader port=5432 user=replication_user password=password application_name=postgres-slave-1'" >> /var/lib/postgresql/data/postgresql.conf &&
+        echo "primary_conninfo = 'host=postgres-master port=5432 user=replication_user password=password application_name=postgres-slave-1'" >> /var/lib/postgresql/data/postgresql.conf &&
         echo "hot_standby = 'on'" >> /var/lib/postgresql/data/postgresql.conf &&
         echo "recovery_target_timeline = 'latest'" >> /var/lib/postgresql/data/postgresql.conf &&
-        pg_basebackup -h postgres-leader -p 5432 -U replication_user -D /var/lib/postgresql/data -P -Xs -R &&
+        pg_basebackup -h postgres-master -p 5432 -U replication_user -D /var/lib/postgresql/data -P -Xs -R &&
         postgres
       '
     networks:
@@ -64,10 +64,10 @@ services:
     command: >
       sh -c '
         echo "standby_mode = 'on'" > /var/lib/postgresql/data/postgresql.conf &&
-        echo "primary_conninfo = 'host=postgres-leader port=5432 user=replication_user password=password application_name=postgres-slave-2'" >> /var/lib/postgresql/data/postgresql.conf &&
+        echo "primary_conninfo = 'host=postgres-master port=5432 user=replication_user password=password application_name=postgres-slave-2'" >> /var/lib/postgresql/data/postgresql.conf &&
         echo "hot_standby = 'on'" >> /var/lib/postgresql/data/postgresql.conf &&
         echo "recovery_target_timeline = 'latest'" >> /var/lib/postgresql/data/postgresql.conf &&
-        pg_basebackup -h postgres-leader -p 5432 -U replication_user -D /var/lib/postgresql/data -P -Xs -R &&
+        pg_basebackup -h postgres-master -p 5432 -U replication_user -D /var/lib/postgresql/data -P -Xs -R &&
         postgres
       '
     networks:
