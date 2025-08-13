@@ -15,6 +15,7 @@ services:
       - ./postgres-master-data:/var/lib/postgresql/data
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf # for allowing replication connections
+    command: postgres -c 'wal_level=replica' -c 'max_wal_senders=10' -c 'hot_standby=on'
     networks:
       - storage_network
 
@@ -34,9 +35,9 @@ services:
       - ./setup-slave.sh:/usr/local/bin/setup-slave.sh
     depends_on:
       - postgres-master
-    command: sh -c 'chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh'
     networks:
       - storage_network
+    entrypoint: ["/usr/local/bin/setup-slave.sh"]
 
   # PostgreSQL Slave 2
   postgres-slave-2:
@@ -54,9 +55,9 @@ services:
       - ./setup-slave.sh:/usr/local/bin/setup-slave.sh
     depends_on:
       - postgres-master
-    command: sh -c 'chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh'
     networks:
       - storage_network
+    entrypoint: ["/usr/local/bin/setup-slave.sh"]
 
 
   # ====== The APP Service ======
