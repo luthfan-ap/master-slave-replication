@@ -157,9 +157,9 @@ def get(key):
                 print("Key not found.")
                 return None
             
-        except psycopg2.Error as e:
-            print(f"Error retrieving data: {e}")
-            return None
+    except psycopg2.Error as e:
+        print(f"Error retrieving data: {e}")
+        return None
 
 
 # main function
