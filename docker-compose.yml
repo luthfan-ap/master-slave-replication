@@ -12,10 +12,15 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     volumes:
-      - ./postgres-master-data:/var/lib/postgresql/data
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
-      - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf # for allowing replication connections
-    command: postgres -c 'wal_level=replica' -c 'max_wal_senders=10' -c 'hot_standby=on'
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf # for allowing replication connections
+      - ./master_data:/var/lib/postgresql/data
+    command:
+      [
+        "postgres",
+        "-c", "config_file=/etc/postgresql/postgresql.conf",
+        "-c", "hba_file=/etc/postgresql/pg_hba.conf"
+      ]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
       interval: 5s
@@ -36,7 +41,7 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     volumes:
-      - ./postgres-slave-1-data:/var/lib/postgresql/data
+      - ./slave1_data:/var/lib/postgresql/data
       - ./setup-slave.sh:/usr/local/bin/setup-slave.sh
     depends_on:
       postgres-master:
