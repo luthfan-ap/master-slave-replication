@@ -16,6 +16,11 @@ services:
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
       - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf # for allowing replication connections
     command: postgres -c 'wal_level=replica' -c 'max_wal_senders=10' -c 'hot_standby=on'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - storage_network
 
@@ -34,7 +39,14 @@ services:
       - ./postgres-slave-1-data:/var/lib/postgresql/data
       - ./setup-slave.sh:/usr/local/bin/setup-slave.sh
     depends_on:
-      - postgres-master
+      postgres-master:
+        condition: service_healthy
+    command: ["/bin/bash", "-c", "chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U msr-user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - storage_network
     entrypoint: ["/usr/local/bin/setup-slave.sh"]
@@ -54,7 +66,14 @@ services:
       - ./postgres-slave-2-data:/var/lib/postgresql/data
       - ./setup-slave.sh:/usr/local/bin/setup-slave.sh
     depends_on:
-      - postgres-master
+      postgres-master:
+        condition: service_healthy
+    command: ["/bin/bash", "-c", "chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - storage_network
     entrypoint: ["/usr/local/bin/setup-slave.sh"]
@@ -72,8 +91,10 @@ services:
       DB_USER: ${PG_USER}
       DB_PASSWORD: ${PG_PASSWORD}
     depends_on:
-      - postgres-master
-      - postgres-slave-1
+      postgres-master:
+        condition: service_healthy
+      postgres-slave-1:
+        condition: service_healthy
     networks:
       - storage_network
 
@@ -88,8 +109,10 @@ services:
       DB_USER: ${PG_USER}
       DB_PASSWORD: ${PG_PASSWORD}
     depends_on:
-      - postgres-master
-      - postgres-slave-2
+      postgres-master:
+        condition: service_healthy
+      postgres-slave-2:
+        condition: service_healthy
     networks:
       - storage_network
       
@@ -104,8 +127,10 @@ services:
       DB_USER: ${PG_USER}
       DB_PASSWORD: ${PG_PASSWORD}
     depends_on:
-      - postgres-master
-      - postgres-slave-1
+      postgres-master:
+        condition: service_healthy
+      postgres-slave-1:
+        condition: service_healthy
     networks:
       - storage_network
 
