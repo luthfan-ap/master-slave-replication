@@ -11,6 +11,8 @@ node_role = 0
 master_conn = None
 slave_conn = None
 
+conn_lock = threading.Lock() # lock for the connection
+
 
 # to connect with the db host
 def db_connect(db_host):
@@ -48,7 +50,7 @@ def create_table(conn):
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS master (
                     id INT PRIMARY KEY,
-                    master_id VARCHAR (50)
+                    master_id VARCHAR(128)
                 );
             """)
 
@@ -57,7 +59,7 @@ def create_table(conn):
                 INSERT INTO master (id, master_id) VALUES (
                     1,
                     ''
-                );
+                ) ON CONFLICT (id) DO NOTHING;
             """)
 
         conn.commit() # committing the database changes made.
@@ -70,50 +72,64 @@ def create_table(conn):
 
 # elects master
 def master_election():
-    global master_conn
     global node_role
+    my_id = os.getenv('HOSTNAME') or os.getenv('CONTAINER_ID') or 'unknown_id'
 
     try:
-        with master_conn.cursor() as cursor:
-            # locking the row (lock with the FOR UPDATE statement)
-            cursor.execute(
-                "SELECT master_id FROM master WHERE id = 1 FOR UPDATE;"
-            )
+        with conn_lock:
+            with master_conn:
+                with master_conn.cursor() as cursor:
+                    # check the current master
+                    cursor.execute("SELECT master_id FROM master WHERE id=1;")
+                    row = cursor.fetchone()
+                    current = row[0] if row else ''
 
-            # updating the master_id to the elected master id
-            master_id = os.getenv('HOSTNAME') or os.getenv('CONTAINER_ID') or 'unknown_id'
-            cursor.execute(
-                "UPDATE master SET master_id = %s WHERE id = 1;", (master_id,)
-            )
-            master_conn.commit()
+                    # if theres no master, claim the master role.
+                    cursor.execute("""
+                        UPDATE master
+                        SET master_id = %s
+                        WHERE id = 1 AND (master_id = '' OR master_id = %s)
+                        RETURNING master_id;
+                    """, (my_id, my_id))
+                    updated = cursor.fetchone()
 
-            # set the node_role into 1 (master role)
-            if node_role != 1:
-                node_role = 1
+        # update role based on the election result
+        if updated and updated[0] == my_id:
+            node_role = 1  # aku master
             return True
-
-    except psycopg2.OperationalError as e:
-        print("Lost connection to the master DB during election: {e}")
-        return False
+        else:
+            # if theres another master, set the role to slave
+            node_role = 2
+            return False
     except psycopg2.Error as e:
-        print("error during election: {e}")
-        # set the node_role into 2 (slave role)
+        print(f"error during election: {e}")
         node_role = 2
         return False
 
 
 # loops in the background, checks whether there is an active master or not
 def async_master_loop():
-    global master_conn
-    global node_role
-
+    global master_conn, node_role
+    my_id = os.getenv('HOSTNAME') or os.getenv('CONTAINER_ID') or 'unknown_id'
     while True:
-        if node_role != 1: # if not master yet
-            if master_conn:
-                master_election()
-            else:
-                master_conn = db_connect(os.getenv('MASTER_DB_HOST'))
-        # re-loop every 5 seconds
+        if master_conn is None:
+            master_conn = db_connect(os.getenv('MASTER_DB_HOST'))
+        else:
+            try:
+                with conn_lock:
+                    with master_conn.cursor() as cursor:
+                        cursor.execute("SELECT master_id FROM master WHERE id=1;")
+                        row = cursor.fetchone()
+                        current = row[0] if row else ''
+                if current == '':
+                    master_election()  # do the master election
+                elif current == my_id:
+                    node_role = 1
+                else:
+                    node_role = 2
+            except psycopg2.Error as e:
+                print(f"Election loop DB error: {e}")
+                node_role = 2
         time.sleep(5)
 
 # 'put' command handler
@@ -210,12 +226,15 @@ def main():
                 time.sleep(1)
                 continue
             
-            statement = input("Enter command: ").strip().lower()
+            print("Enter command: ")
+            statement = sys.stdin.readline().strip()
             if not statement:
+                print("Exiting due to non-interactive input.")
+                time.sleep(1)
                 continue
 
             parts = statement.split()
-            command = parts[0]
+            command = parts[0].lower()
 
             # put command
             if command == "put":

@@ -17,7 +17,7 @@ services:
       - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf # for allowing replication connections
     command: postgres -c 'wal_level=replica' -c 'max_wal_senders=10' -c 'hot_standby=on'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -43,13 +43,12 @@ services:
         condition: service_healthy
     command: ["/bin/bash", "-c", "chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U msr-user"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
       - storage_network
-    entrypoint: ["/usr/local/bin/setup-slave.sh"]
 
   # PostgreSQL Slave 2
   postgres-slave-2:
@@ -70,13 +69,12 @@ services:
         condition: service_healthy
     command: ["/bin/bash", "-c", "chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
       - storage_network
-    entrypoint: ["/usr/local/bin/setup-slave.sh"]
 
 
   # ====== The APP Service ======
