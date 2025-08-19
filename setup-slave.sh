@@ -1,22 +1,37 @@
 #!/bin/bash
+set -e
 
-# setup-slave.sh
-# This script configures a PostgreSQL slave to connect to the master for replication.
+echo "Setting up PostgreSQL slave..."
 
-# Wait for the master to be ready
-echo "POSTGRES_USER is: $POSTGRES_USER"
-until pg_isready -h postgres-master -p 5432 -U $POSTGRES_USER; do
-  echo "Waiting for postgres-master..."
-  sleep 1
-done
-echo "postgres-master is up and running."
+# Ensure PGDATA exists
+mkdir -p "$PGDATA"
+chown -R postgres:postgres "$PGDATA"
 
-# Clean old data directory
-rm -rf /var/lib/postgresql/data/*
+if [ -z "$(ls -A "$PGDATA")" ]; then
+    echo "Empty data dir, cloning from master..."
 
-# Run base backup as 'postgres' user
-su - postgres -c "PGPASSWORD=$POSTGRES_PASSWORD pg_basebackup -h postgres-master -p 5432 -U $POSTGRES_USER -D /var/lib/postgresql/data -P -Xs -R"
+    # Run base backup from master as postgres user
+    su - postgres -c "PGPASSWORD='$POSTGRES_PASSWORD' pg_basebackup \
+        -h postgres-master \
+        -D '$PGDATA' \
+        -U '$POSTGRES_USER' \
+        -v -P \
+        --wal-method=stream"
 
-exec su - postgres -c "/usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/data"
-# The -R flag creates standby.signal and sets primary_conninfo automatically
-# Do not start postgres manually; let the container entrypoint handle it
+    # Configure replication
+    touch "$PGDATA/standby.signal"
+    echo "primary_conninfo = 'host=postgres-master port=5432 user=$POSTGRES_USER password=$POSTGRES_PASSWORD'" > "$PGDATA/postgresql.auto.conf"
+
+    # Fix permissions on data directory
+    chown -R postgres:postgres "$PGDATA"
+    chmod 700 "$PGDATA"
+
+    echo "Slave setup complete."
+else
+    echo "Data directory not empty, skipping base backup."
+fi
+
+# Now hand over to postgres (not root!)
+exec su - postgres -c "/usr/lib/postgresql/16/bin/postgres -D $PGDATA \
+  -c config_file=/etc/postgresql/postgresql.conf \
+  -c hba_file=/etc/postgresql/pg_hba.conf"

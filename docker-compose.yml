@@ -4,17 +4,15 @@ services:
   postgres-master:
     image: postgres:16
     container_name: postgres-master
-    ports:
-      - "5432:5432"
     environment:
       # read from the .env file
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     volumes:
+      - ./init/init.sql:/docker-entrypoint-initdb.d/init.sql
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf # for allowing replication connections
-      - ./master_data:/var/lib/postgresql/data
     command:
       [
         "postgres",
@@ -22,7 +20,7 @@ services:
         "-c", "hba_file=/etc/postgresql/pg_hba.conf"
       ]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -33,22 +31,22 @@ services:
   postgres-slave-1:
     image: postgres:16
     container_name: postgres-slave-1
-    ports:
-      - "5433:5432"
     environment:
       # read from the .env file
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     volumes:
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
       - ./slave1_data:/var/lib/postgresql/data
-      - ./setup-slave.sh:/usr/local/bin/setup-slave.sh
+      - ./setup-slave.sh:/setup-slave.sh
     depends_on:
       postgres-master:
         condition: service_healthy
-    command: ["/bin/bash", "-c", "chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh"]
+    command: [ "bash", "-c", "./setup-slave.sh" ]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -67,14 +65,16 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     volumes:
-      - ./postgres-slave-2-data:/var/lib/postgresql/data
-      - ./setup-slave.sh:/usr/local/bin/setup-slave.sh
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ./slave2_data:/var/lib/postgresql/data
+      - ./setup-slave.sh:/setup-slave.sh
     depends_on:
       postgres-master:
         condition: service_healthy
-    command: ["/bin/bash", "-c", "chmod +x /usr/local/bin/setup-slave.sh && /usr/local/bin/setup-slave.sh"]
+    command: [ "bash", "-c", "./setup-slave.sh" ]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -86,6 +86,8 @@ services:
   # app-1
   app-1:
     build: .
+    stdin_open: true   # equivalent of -i
+    tty: true          # equivalent of -t
     container_name: app-1
     environment:
       MASTER_DB_HOST: postgres-master
@@ -104,6 +106,8 @@ services:
   # app-2
   app-2:
     build: .
+    stdin_open: true   # equivalent of -i
+    tty: true          # equivalent of -t
     container_name: app-2
     environment:
       MASTER_DB_HOST: postgres-master
@@ -122,6 +126,8 @@ services:
   # app-3
   app-3:
     build: .
+    stdin_open: true   # equivalent of -i
+    tty: true          # equivalent of -t
     container_name: app-3
     environment:
       MASTER_DB_HOST: postgres-master
