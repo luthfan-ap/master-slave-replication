@@ -2,156 +2,180 @@ services:
   # ====== The POSTGRESQL Database Service ======
   # PostgreSQL Master
   postgres-master:
-    image: postgres:16
+    image: postgres:14
     container_name: postgres-master
+    restart: always
     environment:
       # read from the .env file
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
-    volumes:
-      - ./init/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf
-      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf # for allowing replication connections
-    command:
-      [
-        "postgres",
-        "-c", "config_file=/etc/postgresql/postgresql.conf",
-        "-c", "hba_file=/etc/postgresql/pg_hba.conf"
-      ]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+    volumes:
+      - master_data:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
+    command: >
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c hba_file=/etc/postgresql/pg_hba.conf
     networks:
-      - storage_network
+      - msr-net
+    ports:
+      - "5433:5432"
 
   # PostgreSQL Slave 1
   postgres-slave-1:
-    image: postgres:16
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: postgres-slave-1
+    restart: always
     environment:
       # read from the .env file
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
+      MASTER_HOST: postgres-master
+      REPLICA_NAME: slave1
+      PGDATA: /var/lib/postgresql/data
     volumes:
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      - slave1_data:/var/lib/postgresql/data
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
-      - ./slave1_data:/var/lib/postgresql/data
-      - ./setup-slave.sh:/setup-slave.sh
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
     depends_on:
-      postgres-master:
-        condition: service_healthy
-    command: [ "bash", "-c", "./setup-slave.sh" ]
+      - postgres-master
+    networks:
+      - msr-net
+    ports:
+      - "5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 5
-    networks:
-      - storage_network
+      retries: 20
+    entrypoint: ["/bin/bash", "/setup-slave.sh"]
 
   # PostgreSQL Slave 2
   postgres-slave-2:
-    image: postgres:16
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: postgres-slave-2
-    ports:
-      - "5434:5432"
+    restart: always
     environment:
       # read from the .env file
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
+      MASTER_HOST: postgres-master
+      REPLICA_NAME: slave2
+      PGDATA: /var/lib/postgresql/data
     volumes:
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      - slave2_data:/var/lib/postgresql/data
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
-      - ./slave2_data:/var/lib/postgresql/data
-      - ./setup-slave.sh:/setup-slave.sh
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
     depends_on:
-      postgres-master:
-        condition: service_healthy
-    command: [ "bash", "-c", "./setup-slave.sh" ]
+      - postgres-master
+    networks:
+      - msr-net
+    ports:
+      - "5435:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 5
-    networks:
-      - storage_network
+      retries: 20
+    entrypoint: ["/bin/bash", "/setup-slave.sh"]
 
 
   # ====== The APP Service ======
   # app-1
   app-1:
-    build: .
-    stdin_open: true   # equivalent of -i
-    tty: true          # equivalent of -t
-    container_name: app-1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: msr-app-1
+    restart: always
     environment:
+      APP_NAME: app-1
+      PG_DB: ${PG_DB}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
       MASTER_DB_HOST: postgres-master
       SLAVE_DB_HOST: postgres-slave-1
-      DB_NAME: ${PG_DB}
-      DB_USER: ${PG_USER}
-      DB_PASSWORD: ${PG_PASSWORD}
+    networks:
+      - msr-net
+    stdin_open: true
+    tty: true
     depends_on:
       postgres-master:
         condition: service_healthy
       postgres-slave-1:
-        condition: service_healthy
-    networks:
-      - storage_network
+        condition: service_started
+      postgres-slave-2:
+        condition: service_started
 
   # app-2
   app-2:
-    build: .
-    stdin_open: true   # equivalent of -i
-    tty: true          # equivalent of -t
-    container_name: app-2
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: msr-app-2
+    restart: always
     environment:
+      APP_NAME: app-2
+      PG_DB: ${PG_DB}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
       MASTER_DB_HOST: postgres-master
       SLAVE_DB_HOST: postgres-slave-2
-      DB_NAME: ${PG_DB}
-      DB_USER: ${PG_USER}
-      DB_PASSWORD: ${PG_PASSWORD}
-    depends_on:
-      postgres-master:
-        condition: service_healthy
-      postgres-slave-2:
-        condition: service_healthy
     networks:
-      - storage_network
-      
-  # app-3
-  app-3:
-    build: .
-    stdin_open: true   # equivalent of -i
-    tty: true          # equivalent of -t
-    container_name: app-3
-    environment:
-      MASTER_DB_HOST: postgres-master
-      SLAVE_DB_HOST: postgres-slave-1
-      DB_NAME: ${PG_DB}
-      DB_USER: ${PG_USER}
-      DB_PASSWORD: ${PG_PASSWORD}
+      - msr-net
+    stdin_open: true
+    tty: true
     depends_on:
       postgres-master:
         condition: service_healthy
       postgres-slave-1:
-        condition: service_healthy
+        condition: service_started
+      postgres-slave-2:
+        condition: service_started
+      
+  # app-3
+  app-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: msr-app-3
+    restart: always
+    environment:
+      APP_NAME: app-3
+      PG_DB: ${PG_DB}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
+      MASTER_DB_HOST: postgres-master
+      SLAVE_DB_HOST: postgres-slave-1   # just randomly picking XD, could be either slave 1 or 2
     networks:
-      - storage_network
+      - msr-net
+    stdin_open: true
+    tty: true
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+      postgres-slave-1:
+        condition: service_started
+      postgres-slave-2:
+        condition: service_started
 
 # network so that the containers can communicate with each other.
 networks:
-  storage_network:
-    driver: bridge
+  msr-net:
 
 volumes:
-  postgres-master-data:
-    driver: local
-  postgres-slave-1-data:
-    driver: local
-  postgres-slave-2-data:
-    driver: local
+  master_data:
+  slave1_data:
+  slave2_data:

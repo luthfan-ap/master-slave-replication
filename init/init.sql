@@ -23,3 +23,17 @@ END
 $$;
 
 GRANT ALL PRIVILEGES ON DATABASE "msr-db" TO "msr-user";
+
+\c "msr-db"
+
+-- coordination table for master election
+CREATE TABLE IF NOT EXISTS master (
+    id INT PRIMARY KEY,
+    master_id TEXT,
+    last_heartbeat TIMESTAMPTZ
+);
+
+-- inserting initial master record
+INSERT INTO master (id, master_id, last_heartbeat)
+VALUES (1, '', NOW())
+ON CONFLICT (id) DO NOTHING;

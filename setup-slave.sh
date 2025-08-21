@@ -1,16 +1,28 @@
 #!/bin/bash
 set -e
 
+: "${PGDATA:=/var/lib/postgresql/data}"
+
 echo "Setting up PostgreSQL slave..."
 
 # Ensure PGDATA exists
 mkdir -p "$PGDATA"
-chown -R postgres:postgres "$PGDATA"
+chmod 700 "$PGDATA"
 
-if [ -z "$(ls -A "$PGDATA")" ]; then
-    echo "Empty data dir, cloning from master..."
+# Check if PGDATA already initialized (look for PG_VERSION file)
+if [ ! -f "$PGDATA/PG_VERSION" ]; then
+    echo "Empty or invalid data dir, cloning from master..."
 
-    # Run base backup from master as postgres user
+    until pg_isready -h postgres-master -U "$POSTGRES_USER"; do
+        echo "Waiting for master to accept connections..."
+        sleep 3
+    done
+
+    # Clean dir to be safe
+    rm -rf "$PGDATA"/*
+    chown -R postgres:postgres "$PGDATA"
+
+    # Run base backup
     su - postgres -c "PGPASSWORD='$POSTGRES_PASSWORD' pg_basebackup \
         -h postgres-master \
         -D '$PGDATA' \
@@ -20,18 +32,18 @@ if [ -z "$(ls -A "$PGDATA")" ]; then
 
     # Configure replication
     touch "$PGDATA/standby.signal"
-    echo "primary_conninfo = 'host=postgres-master port=5432 user=$POSTGRES_USER password=$POSTGRES_PASSWORD'" > "$PGDATA/postgresql.auto.conf"
+    echo "primary_conninfo = 'host=postgres-master port=5432 user=$POSTGRES_USER password=$POSTGRES_PASSWORD'" \
+      > "$PGDATA/postgresql.auto.conf"
 
-    # Fix permissions on data directory
     chown -R postgres:postgres "$PGDATA"
     chmod 700 "$PGDATA"
 
     echo "Slave setup complete."
 else
-    echo "Data directory not empty, skipping base backup."
+    echo "Data directory already initialized, skipping base backup."
 fi
 
-# Now hand over to postgres (not root!)
-exec su - postgres -c "/usr/lib/postgresql/16/bin/postgres -D $PGDATA \
+# Start postgres
+exec su - postgres -c "postgres -D $PGDATA \
   -c config_file=/etc/postgresql/postgresql.conf \
   -c hba_file=/etc/postgresql/pg_hba.conf"

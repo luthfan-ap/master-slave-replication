@@ -1,14 +1,16 @@
-# Python base image
-FROM python:3.9-slim
+FROM postgres:14
+
+# install python
+RUN apt-get update && apt-get install -y python3 python3-pip
 
 WORKDIR /app
 
-# installing the requirements
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
-# copying the python file
-COPY app.py app.py
+COPY app.py .
+COPY setup-slave.sh /setup-slave.sh
 
-# setting the command to run the python script
-CMD ["python", "app.py"]
+RUN chmod +x /setup-slave.sh
+
+CMD ["/bin/bash", "/setup-slave.sh"]
