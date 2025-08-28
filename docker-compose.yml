@@ -10,6 +10,7 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     volumes:
+      - postgres-master-data:/var/lib/postgresql/data
       - ./init/init.sql:/docker-entrypoint-initdb.d/init.sql
       - ./postgresql.conf:/etc/postgresql/postgresql.conf
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf # for allowing replication connections
@@ -29,6 +30,7 @@ services:
 
   # PostgreSQL Slave 1
   postgres-slave-1:
+    user: postgres
     image: postgres:16
     container_name: postgres-slave-1
     environment:
@@ -37,9 +39,7 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     volumes:
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf
-      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
-      - ./slave1_data:/var/lib/postgresql/data
+      - postgres-slave-1-data:/var/lib/postgresql/data
       - ./setup-slave.sh:/setup-slave.sh
     depends_on:
       postgres-master:
@@ -55,6 +55,7 @@ services:
 
   # PostgreSQL Slave 2
   postgres-slave-2:
+    user: postgres
     image: postgres:16
     container_name: postgres-slave-2
     ports:
@@ -65,9 +66,7 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     volumes:
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf
-      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
-      - ./slave2_data:/var/lib/postgresql/data
+      - postgres-slave-2-data:/var/lib/postgresql/data
       - ./setup-slave.sh:/setup-slave.sh
     depends_on:
       postgres-master:
